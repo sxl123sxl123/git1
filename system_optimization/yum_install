@@ -9,13 +9,15 @@ then
 	mount |grep /dev/sr0 >/dev/null 2>&1
 	if [ $? -eq 0 ];then
 		umount /dev/sr0 
-		mount /dev/sro /media/cdrom >/dev/null 2>&1
+		mount /dev/sr0 /media/cdrom >/dev/null 2>&1
+	else
+		mount /dev/sr0 /media/cdrom
 	fi	
 	cd /etc/yum.repos.d/
 	[ -d /etc/yum.repos.d/bak  ] || mkdir  /etc/yum.repos.d/bak
 	mv *r* ./bak
 
-	cat <<-EOF > local.repo
+	[ -f /etc/yum.repo.d/local.repo ] ||cat <<-EOF > local.repo
 	[c7-media]
 	name=CentOS-$releasever - Media
 	baseurl=file:///media/CentOS/
@@ -33,30 +35,28 @@ fi
 #判断用户是否需要建立阿里云源仓库
 read -p "是否建立阿里云源仓库(y|n)" al
 
-if [ $al == y  ];then
-	echo "                                   正在测试网络连通性！                "
-	ping  -c 1 -w 1   www.baidu.com  &>/dev/null
-	if [ $? -ne 0  ]
-	then  
-	  echo "网络未连通！请检查网络！"
-	   sleep 1
-	   exit 1
-#	退出状态1网络未连通！
-	else
-	  echo "网络通畅！正在进行下一步！"
-	fi
-fi
+#if [ $al == y  ];then
+#	echo -e "\e[1;033m                                   正在测试网络连通性！               \e[0m "
+#
+#	ping  -c1    www.baidu.com  &>/dev/null
+#	if [ $? -ne 0  ];then  
+#		echo "网络未连通！请检查网络！"
+#		sleep 1
+#		exit 1
+##		退出状态1网络未连通！
+#	else
+#		echo "网络通畅！正在进行下一步！"
+#	fi
+#fi
 #安装wget命令，构建阿里云源仓库
 #判断用户是否建立阿里云仓库，如果建立，检测wget命令是否安装。
-echo "正在检测wget命令是否安装！"
-if [ $al =  y  ];then
+if [ $al ==  y  ];then
 	which wget  &>/dev/null
-	if [ $? -eq 0  ]
-	 then
-	 echo "未检测到wget命令，正在安装wget包，请稍等"
-	 yum -y install wget &>/dev/null
+	if [ !  $? -eq 0  ];then
+	 	echo "未检测到wget命令，正在安装wget包，请稍等"
+	 	yum -y install wget &>/dev/null
 		if [ $? -ne 0 ];then
-			echo  'wget 安装失败，请手动安装'
+			echo  'wget 安装失败,请手动安装！'
 			exit 2
 #			退出状态2wget命令安装失败
 		fi
@@ -64,11 +64,15 @@ if [ $al =  y  ];then
 fi
 
 #构建yum 阿里云源仓库
-if [ $al =  y  ];then
-	cd /etc/yum.repo.d/
-	wget http://mirrors.aliyun.com/repo/Centos-7.repo
-	if [ $? -eq  0 ];then
-		echo '阿里云centos7.repo建立完成'
+if [ $al == y  ];then
+	if [ ! -f /etc/yum.repos.d/Centos-7.repo ];then
+		cd /etc/yum.repos.d/
+		wget http://mirrors.aliyun.com/repo/Centos-7.repo
+	fi
+fi
+if [ $al ==  y  ];then
+	if [ -f /etc/yum.repos.d/Centos-7.repo ];then
+		echo -e '\e[1;033m                    阿里云centos7.repo建立完成 \e[0m'
 	else 
 		echo  '建立失败，请检查网络是否稳定！'
 		exit 3 
@@ -82,21 +86,23 @@ fi
 
 read -p '是否建立epel源:(y|n)'  ep
 if [ $ep == y  ];then
-	cd /etc/yum.repo.d/
-	wget http://mirrors.aliyun.com/repo/epel-7.repo
-	if [ $? -eq 0  ];then
+	cd /etc/yum.repos.d/
+	if [ ! -f /etc/yum.repos.d/epel-7.repo   ];then
+		wget http://mirrors.aliyun.com/repo/epel-7.repo
+	fi
+	if [ -f /etc/yum.repos.d/epel-7.repo ];then
 		echo '恭喜epel-7.repo安装成功'
 	else
-		echo  "epel-7安装失败，请手动检测"
+		echo  "epel-7安装失败，请检测网络连通性！"
 		exit 4
 #		退出状态4epel源安装失败！
 	fi
 fi
 
 #清理缓存重新建立仓库
-yum  clean all  >/dev/null 2>&1   && yum makecahe >/dev/null 2>&1
+yum  clean all   &&  yum makecache
 if  [ $? -eq 0   ];then
-	echo 'yum仓重新设定完成，放心使用！'
+	echo -e '\e[1;033m			yum仓重新设定完成，放心使用！ \e[0m'
 fi
 #阿里云的repo地址
 #http://mirrors.aliyun.com/repo/
