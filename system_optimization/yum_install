@@ -1,0 +1,110 @@
+#!/bin/bash
+#构建本地仓库
+#判断用户是否建立本地yum仓库
+read -p "是否建立本地仓库？(yes|no)" bd
+
+if [ $bd = yes  ]
+then
+[ -d  /media/cdrom  ] || mkdir /media/cdrom
+[ -d /media/cdrom/Packages  ]  || mount /dev/sr0  /media/cdrom  &>/dev/null
+cd /etc/yum.repos.d/
+[ -d /etc/yum.repos.d/bak  ] || mkdir  /etc/yum.repos.d/bak
+mv *r* bak
+cat << EOF > local.repo
+[c7-media]
+name=CentOS-$releasever - Media
+baseurl=file:///media/CentOS/
+        file:///media/cdrom/
+        file:///media/cdrecorder/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+EOF
+echo "正在建立本地仓库，请稍等："
+yum clean all &> /dev/null && yum makecache &> /dev/null
+rpm  --import /media/cdrom/*K*
+sl=$(yum list |wc -l) &>/dev/null
+echo  "共有${sl}个rpm包可用!!"
+fi 
+
+
+
+#判断用户是否需要建立阿里云源仓库
+read -p "是否建立阿里云源仓库(yes|no)" al
+
+echo "                                   正在测试网络连通性！                "
+ping  -c 1 -w 1   www.baidu.com  &>/dev/null
+if [ $? -ne 0  ]
+then  
+  echo "网络未连通！请检查网络！"
+   sleep 1
+   exit
+else
+  echo "网络通畅！正在进行下一步！"
+fi
+#安装wget命令，构建阿里云源仓库
+#判断用户是否建立阿里云仓库，如果建立，检测wget命令是否安装。
+echo "正在检测wget命令是否安装！"
+if [ $al =  yes  ]
+then
+which wget  &>/dev/null
+if [ $? -eq 0  ]
+ then
+ echo "未检测到wget命令，正在安装wget包，请稍等"
+ yum -y install wget &>/dev/null
+fi
+fi
+
+#构建yum 阿里云源仓库
+if [ $al =  yes  ]
+then
+ [ -f /etc/yum.repos.d/bak/CentOS-Base.repo ]
+if [ $? -eq  0  ]
+  then
+    cp /etc/yum.repos.d/bak/CentOS-Base.repo  /etc/yum.repos.d/
+    wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo &>/dev/null
+else
+cat << EOF >/etc/yum.repos.d/CentOS-Base.repo
+[base]
+name=CentOS-$releasever - Base
+mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=os&infra=$infra
+#baseurl=http://mirror.centos.org/centos/$releasever/os/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+#released updates 
+[updates]
+name=CentOS-$releasever - Updates
+mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=updates&infra=$infra
+#baseurl=http://mirror.centos.org/centos/$releasever/updates/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+#additional packages that may be useful
+[extras]
+name=CentOS-$releasever - Extras
+mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=extras&infra=$infra
+#baseurl=http://mirror.centos.org/centos/$releasever/extras/$basearch/
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+#additional packages that extend functionality of existing packages
+[centosplus]
+name=CentOS-$releasever - Plus
+mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=centosplus&infra=$infra
+#baseurl=http://mirror.centos.org/centos/$releasever/centosplus/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+EOF
+
+wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo &>/dev/null
+fi
+echo "正在构建阿里云源仓库，请稍等,过程较慢"
+yum clean all &>/dev/null && yum makecache &>/dev/null
+gs=$(yum list |wc -l)
+echo "正在统计可用软件包"
+echo "共有$gs个软件包可用，本次服务完成"
+
+
+fi

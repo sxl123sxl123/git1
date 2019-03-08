@@ -1,0 +1,91 @@
+#/bin/bash 
+#搭建dhcp服务
+#
+#
+#检测安装dhcp服务
+ echo "请确保yum可以正常使用"
+
+rpm -qa |grep dhcp|awk -F - '{print $2}'|grep "[0-9].*" &>/dev/null
+if [ $? -eq 1 ]
+then
+echo "检测到未安装dhcp服务，正在安装dhcp服务,请稍等"
+yum -y install dhcp &>/dev/null
+fi
+
+#修改配置文件
+#定义变量
+read -p "请输入网卡名称：" wk
+ip=$(ifconfig $wk|grep -w inet |awk '{print $2}'|awk -F. '{print $1"."$2"."$3}')
+read -p "请输入默认域名(默认:shixueliang.com) ：" yuming
+echo $moren|grep ^[a-z].* &>/dev/null
+if [ $? -eq  1  ]
+then
+  yuming=shixueliang.com
+fi
+
+read -p "请输入默认dns最多三个（默认：北京的dns服务器地址 202.106.0.20）：" dns1 dns2 dns3
+echo $dns1$dns2$dns3 |grep ^[1-9].* &>/dev/null
+if [ $? -eq  1  ]
+then
+  dns1=202.106.0.20
+fi
+
+read -p "设置dhcp租约默认和最大租约时间,(默认600,7200)：" moren max
+
+echo $moren|grep ^[1-9].* &>/dev/null
+if [ $? -eq  1  ]
+then
+  moren=600
+fi
+
+echo $max|grep ^[1-9].* &>/dev/null
+if [ $? -eq  1  ]
+then
+  max=7200
+fi
+
+
+read -p "设置你要出租的地址池范围$ip.的始末（默认：100-200） ：" qi  mo
+
+echo  $qi|grep ^[1-9].* &>/dev/null
+if [ $? -eq  1  ]
+then
+  qi=100
+fi
+echo $mo|grep ^[1-9].* &>/dev/null
+if [ $? -eq  1  ]
+then
+  mo=200
+fi
+
+read -p  " 设置默认网关$ip.(默认：1) ：" wg
+echo $wg|grep ^[1-9].* &>/dev/null
+if [ $? -eq  1  ]
+then
+  wg=1
+fi
+
+cat << EOF > /etc/dhcp/dhcpd.conf
+
+option domain-name "$yuming";
+option domain-name-servers  $dns1,$dns2,$dns3;
+default-lease-time $moren;
+max-lease-time  $max;
+
+subnet $ip.0 netmask 255.255.255.0 {
+  range $ip.$qi   $ip.$mo;
+  option routers  $ip.$wg;
+}
+EOF
+
+#启动服务
+systemctl start  dhcpd &>/dev/null
+if [ $? -eq  0  ]
+then
+  echo "服务正常启动，请放心使用"
+else
+  echo "请查看日志文件/var/log/memessages 排错"
+fi
+
+echo "服务启动状态:"
+systemctl  status  dhcpd |awk '/Active/{print $2 $3}'

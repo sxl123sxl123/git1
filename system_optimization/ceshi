@@ -1,0 +1,28 @@
+#!/bin/bash
+##
+sleep 1
+echo "正在设置用户登陆系统时显示磁盘、内存、登陆服务器的用户、负载平均值等情况！"
+cat  << EOF  >>/etc/profile
+echo -n "根目录的使用情况："
+df -Th |grep -w    / |awk '{print $6}'
+
+echo -n "当前登录用户："
+whoami
+gs=$(w |wc -l)
+yh=$(expr $gs - 2)
+echo  -n  "当前系统登陆的用户有$yh个"
+echo -n   "其中以tty终端登录的有："
+w|awk '/tty/{print $1}'
+echo -n   "其中以pts终端登录的有："
+w|awk '/pts/{print $1}'
+
+echo -n "内存使用率："
+free |awk -F" " '/Mem:/{print int($3*100/$2)"%" }'
+
+echo -n "cpu使用情况:"
+top -b  -n 1 |awk '/Cpu/{print  }'
+
+echo -n "负载平均值："
+w |awk '/average:/{print "load average: "$8" "$9" "$10}'
+EOF
+

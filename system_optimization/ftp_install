@@ -1,0 +1,256 @@
+#!/bin/bash 
+###
+##
+##
+#
+#定义当前位置，引用变量！
+pwd=$(pwd)
+
+echo "请保证yum的本地仓库可以正常使用！"
+#关闭防火墙
+echo "正在关闭防火墙！"
+ iptables -F
+ systemctl  stop  firewalld 
+ setenforce 0 
+#提醒用户本地用户和虚拟用户不可以同时登陆系统
+echo -e "\033[33m                请注意虚拟用户和本地用户不可以同时登陆系统 ！  \033[0m"
+#检测安装vsftpd服务
+rpm -q vsftpd  &>/dev/null
+if  [ $? -ne 0  ]
+then  
+  echo "正在安装vsftpd服务！请稍等！"
+   yum -y  install  vsftpd
+fi
+
+#建立主配置文件的公共选项
+echo "在$pwd位置下生成了主配置文件：vsftpd.conf!"
+ 
+cat  << EOF >$pwd/vsftpd.conf
+write_enable=YES
+local_umask=022
+dirmessage_enable=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+xferlog_std_format=YES
+listen=NO
+listen_ipv6=YES
+
+pam_service_name=vsftpd
+userlist_enable=YES
+tcp_wrappers=YES
+EOF
+
+#詢問用戶是否开启匿名用户登陆！
+
+read  -p  "是否允許匿名用戶登陆(yes|no)，默认不允许！:"  niming
+if [ $niming = "yes"  ]
+then
+   echo  "anonymous_enable=YES" >> $pwd/vsftpd.conf
+  else
+   echo "anonymous_enable=NO" >>$pwd/vsftpd.conf
+fi
+
+#询问用户是否开启本地用户登陆
+read  -p "是否允许本地用户登录！默认不允许！(yes|no):" bendi
+if [ $bendi = "yes"  ] 
+then  
+   echo "local_enable=YES" >>  $pwd/vsftpd.conf
+fi
+#询问是否开启虚拟用户
+read  -p "是否开启虚拟用户登录ftp！默认不允许！(yes|no):"   xuni
+
+#安装所依赖的软件
+if [ ${xuni} = "yes"  ]
+then 
+  rpm -q libdb-utils &>/dev/null
+  if [ $? -ne 0  ]
+   then 
+   echo "未检测到libdb-utils软件包，正在安装，稍等！"
+   yum -y install  libdb-utils  &>/dev/null
+  fi
+fi
+
+#判断是否安装成功
+ if [ ${xuni} = "yes"  ] 
+ then  
+ rpm -q libdb-utils &>/dev/null
+  if [ $? -ne 0  ]  
+   then  
+    echo -e "\033[33m libdb-utils包安装失败！一秒后退出脚本！  \033[0m"
+   sleep 1  
+   exit 
+  fi
+fi
+
+#配置虚拟用户所依赖的配置文件
+#
+if [ ${xuni} =  "yes"  ]
+then 
+   echo "local_enable=YES" >>  $pwd/vsftpd.conf 
+   echo -e  "\033[33m   正在创建虚拟映射的本地用户：vsftp！家目录：/home/vsftp！请勿删除！ \033[0m" 
+   useradd  -s /sbin/nologin   vsftp  &>/dev/null 
+   echo  -e "\033[33m   已经创建了虚拟用户账号密码文件list！请勿删除！\033[0m"
+   touch  $pwd/list    
+  read -p "请输入虚拟用户的账号！最多五个！空格作分割！："  zhanghao1   zhanghao2  zhanghao3  zhanghao4  zhanghao5
+  read -s -p "请输入虚拟用户对应的密码！空格作分割！：" mima1 mima2 mima3  mima4 mima5 
+  #判断虚拟用户是否建立用户的家目录
+   if [ $zhanghao1!=   ] 
+then 
+   mkdir /home/vsftp/${zhanghao1} &>/dev/null
+   fi 
+   
+   if [ $zhanghao2!=   ] 
+ then
+   mkdir /home/vsftp/${zhanghao2} &>/dev/null
+   fi
+  
+  if [ $zhanghao3!=   ] 
+ then
+   mkdir /home/vsftp/${zhanghao3}  &>/dev/null
+   fi
+
+  if [ $zhanghao4!=   ] 
+ then
+   mkdir /home/vsftp/${zhanghao4} &>/dev/null
+   fi
+
+  if [ $zhanghao5!=   ] 
+ then
+   mkdir /home/vsftp/${zhanghao5}  &>/dev/null
+   fi
+  #修改权限
+   chgrp -R  vsftp   /home/vsftp/
+   chmod 777  -R  /home/vsftp/
+cat << EOF >$pwd/list
+$zhanghao1
+$mima1
+$zhanghao2
+$mima2
+$zhanghao3
+$mima3
+$zhnaghao4
+$mima4
+$zhanghao5
+$mima5
+EOF
+  #建立数据库文件
+  db_load -T -t hash  -f $pwd/list  /etc/vsftpd/list.db  &>/dev/null
+  chmod  600 /etc/vsftpd/list.*
+   chattr +i /etc/vsftpd/list.* 
+  #建立虚拟用户的独立配置文件 目录：/etc/vsftpd/dir
+  mkdir /etc/vsftpd/dir  &>/dev/null
+  
+ if  [ !  $zhanghao1  ] 
+  then 
+   echo '' 
+  else
+  cat <<  EOF >/etc/vsftpd/dir/${zhanghao1}  
+local_root=/home/vsftp/${zhanghao1}
+write_enable=YES
+anon_upload_enable=YES
+anon_world_readable_only=YES
+anon_mkdir_write_enable=YES
+anon_other_write_enable=YES
+EOF
+  fi 
+
+ if  [ ! $zhanghao2 ]
+  then
+  echo  ""
+  else
+  cat <<  EOF >/etc/vsftpd/dir/${zhanghao2}  
+local_root=/home/vsftp/${zhanghao2}
+write_enable=YES
+anon_upload_enable=YES
+anon_world_readable_only=YES
+anon_mkdir_write_enable=YES
+anon_other_write_enable=YES
+EOF
+  fi 
+
+ if  [ ! $zhanghao3  ]
+  then
+  echo ""
+  else
+  cat <<  EOF >/etc/vsftpd/dir/${zhanghao3}  
+local_root=/home/vsftp/${zhanghao3}
+write_enable=YES
+anon_upload_enable=YES
+anon_world_readable_only=YES
+anon_mkdir_write_enable=YES
+anon_other_write_enable=YES
+EOF
+  fi 
+
+ if  [ !  $zhanghao4  ]
+  then
+  echo ""
+  else
+  cat <<  EOF >/etc/vsftpd/dir/${zhanghao4}  
+local_root=/home/vsftp/${zhanghao4}
+write_enable=YES
+anon_upload_enable=YES
+anon_world_readable_only=YES
+anon_mkdir_write_enable=YES
+anon_other_write_enable=YES
+EOF
+  fi 
+
+ if  [ !  $zhanghao5  ]
+  then
+  echo ""
+  else
+  cat <<  EOF >/etc/vsftpd/dir/${zhanghao5}  
+local_root=/home/vsftp/${zhanghao5}
+write_enable=YES
+anon_upload_enable=YES
+anon_world_readable_only=YES
+anon_mkdir_write_enable=YES
+anon_other_write_enable=YES
+EOF
+  fi 
+
+echo "guest_enable=YES
+guest_username=vsftp
+user_config_dir=/etc/vsftpd/dir
+virtual_use_local_privs=YES"  >>$pwd/vsftpd.conf
+   
+echo "#%PAM-1.0
+auth       required     pam_userdb.so   db=/etc/vsftpd/list
+account    required     pam_userdb.so   db=/etc/vsftpd/list" >/etc/pam.d/vsftpd
+
+else
+  echo "#%PAM-1.0
+session    optional     pam_keyinit.so    force revoke
+auth       required     pam_listfile.so item=user sense=deny file=/etc/vsftpd/ftpusers onerr=succeed
+auth       required     pam_shells.so
+auth       include      password-auth
+account    include      password-auth
+session    required     pam_loginuid.so
+session    include      password-auth" >/etc/pam.d/vsftpd
+fi
+#询问是否允许用户切换目录
+read  -p  "是否允许用户切换根目录！(yes|no)! "  qiehuan
+if [ $qiehuan = "no"  ]
+then
+  echo "allow_writeable_chroot=YES" >>$pwd/vsftpd.conf
+  echo "chroot_local_user=YES" >>$pwd/vsftpd.conf
+fi
+
+
+
+
+#删除无用的配置文件
+rm -rf /etc/vsftpd/vsftpd.conf  
+cp  $pwd/vsftpd.conf  /etc/vsftpd/vsftpd.conf 
+rm -rf  $pwd/vsftpd.conf 
+rm -rf  $pwd/list
+#启动程序
+  systemctl  restart  vsftpd
+ if [ $? -ne 0 ]
+   then  
+    echo "程序启动失败！"
+  else  
+    echo "程序启动成功！"
+fi
+

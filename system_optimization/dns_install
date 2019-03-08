@@ -1,0 +1,243 @@
+
+#!/bin/bash 
+#
+echo "本次服务需要使用yum的阿里云源仓库，请确保yum可以正常使用"
+#关闭防火墙
+echo "正在关闭防火墙"
+iptables -F
+systemctl stop firewalld
+setenforce 0
+
+#判断是否安装了bind服务
+rpm -qa |grep bind|awk -F - '{print $2}'|grep "^[0-9].*" &>/dev/null
+if [ $? -eq 1 ]
+then
+echo "检测到未安装bind服务，正在安装bind服务,请稍等"
+yum -y install bind &>/dev/null
+fi
+
+#
+#修改配置文件
+#定义变量pwd，确定脚本所在的位置
+pwd=$(pwd)
+
+#判断用户是否要建立从域用户,如果建立从域用户，则变量 zs 的值为空启用从域相关配置 ， 如果不建立从域， zs 变量的值为#，禁用相关
+#的配置; （主配文件的相关从域配置 ）
+read -p "是否建立从域用户(yes|no )："  pd
+
+if [ $pd != yes  ]
+then
+   zs=#
+fi
+
+
+#设置主域从域的主机名
+read  -p "请输入主从域的主机名字（默认主域名为ns1，如果建立从域请输入从域名）："  zjm  cym
+echo $zjm |grep  ^[a-z].* &>/dev/null
+if  [ $?  -ne  0  ]
+then
+  zjm=ns1
+fi
+
+#用户输入从域的ip地址
+if [ $pd = yes  ]
+then
+read -p "输入从域的ip地址："  cip
+fi
+
+#如果建立的从域，提取从域主机号
+cyzjh=$(echo $cip |awk -F. '{print $4}') &>/dev/null
+
+#设置注册域名
+#
+#
+read -p "请输入注册域名(默认：shixueliang.com)：" ym
+
+echo $ym |grep ^[a-z].*  &> /dev/null
+if [ $? -ne 0  ]
+then
+ ym=shixueliang.com
+fi
+
+
+#判断用户是否建立从域，如果建立则在区域解析文件中添加相关配置（区域解析文件的相关配置）
+
+if [ $pd = yes  ]
+then
+    qycym=$cym
+    PTR=PTR
+    qycyzjh=$cyzjh
+    NS=NS
+    A=A
+    qycip=$cip
+    qyym=$ym
+    fuhao=.
+fi
+
+#确定网卡，提取用户已有的网卡名称
+mc=$(ifconfig |awk -F: '/flag/{print $1 }')  &>/dev/null
+read -p "请输入网卡名称(您有这些网卡可用$mc )：" wk
+ll=$(ifconfig  $wk |awk '/inet\>/{print $2}')
+
+#设置网段
+aa=$(ifconfig $wk |awk '/netmask/{print $2}')
+read -p "输入注册的ip地址(默认$wk的ip：$aa)：" ipdz
+
+echo $ipdz |grep ^[0-9].* &>/dev/null
+if [ $? -ne 0  ]
+then
+ ipdz=$ll
+fi
+
+#提取用户输入的ip地址
+pi=$(echo $ipdz |awk -F. '{print $3"."$2"."$1}') &>/dev/null
+ip=$(echo $ipdz |awk -F. '{print $1"."$2"."$3}') &>/dev/null
+
+#修改主配置文件
+cat << EOF > /etc/named.conf
+options {
+        directory       "/var/named";
+};
+
+zone "$ym" IN {
+type master;
+file "$ym.zheng";
+$zs allow-transfer  { $cip;  };
+};
+
+zone "$pi.in-addr.arpa" IN {
+type master;
+file "$ym.fan";
+$zs allow-transfer  { $cip;  };
+};
+EOF
+
+
+#建立正向区域文件
+#
+cat << EOF >/var/named/$ym.zheng
+\$TTL 1D
+@       IN SOA  $ym.  $zjm.$ym.  (
+                                        20100101        ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+        NS      $zjm.$ym.
+        $NS     $qycym$fuhao$qyym$fuhao
+$qycym  $A      $qycip
+$zjm     A      $ipdz
+EOF
+
+
+#提取主域的主机号
+zjh=$(echo $ipdz |awk -F. '{print  $4}') &>/dev/null
+
+#建立反向区域文件
+#
+cat << EOF >/var/named/$ym.fan
+\$TTL 1D
+@       IN SOA  $ym.  $zjm.$ym.  (
+                                        20100101        ; serial
+                                        1D      ; refresh
+                                        1H      ; retry
+                                        1W      ; expire
+                                        3H )    ; minimum
+        NS      $zjm.$ym.
+        $NS     $cym$fuhao$qyym$fuhao
+$zjh    PTR     $zjm.$ym.
+$qycyzjh        $PTR    $cym$fuhao$qyym$fuhao
+EOF
+
+#提示用户修改正在修改区域解析文件
+echo "正在修改区域解析文件的属组"
+chgrp named /var/named/$ym.*
+
+echo "请手动修改解析区域文件"
+echo "请手动修改解析区域文件"
+echo "请手动修改解析区域文件"
+echo "请手动修改解析区域文件"
+
+#启动服务
+#
+systemctl restart  named &>/dev/null
+if [ $? -eq  0  ]
+then
+  echo "dns主域服务正常启动，请放心使用"
+else
+  echo "请查看日志文件/var/log/memessages 排错"
+fi
+
+#服务状态
+#
+echo -n "服务启动状态:"
+systemctl  status  named |awk '/Active/{print $2 $3}'
+
+
+
+#判断是否建立从域，建立从域的主配置文件
+if [ $pd = yes  ]
+then 
+cat << EOF >$pwd/named.conf
+options {
+        directory       "/var/named";
+};
+
+zone "$ym" IN {
+type slave;
+masters { $ipdz;  };
+file "salves/$ym.zheng";
+};
+
+zone "$pi.in-addr.arpa" IN {
+type slave;
+masters {  $ipdz;  };
+file "slaves/$ym.fan";
+};
+EOF
+echo "从域主配置文件在$pwd/建立"
+fi
+#判断是否安装了sshpass包（rpm格式的）
+rpm -qa |grep sshpass &>/dev/null
+if [ $? -ne 0  ]
+then
+ echo "系统没有检测到sshpass安装包，正在安装，稍等！"
+ yum -y install sshpass  &>/dev/null
+fi
+#判断是否安装成功
+ rpm -qa |grep sshpass &>/dev/null
+if [ $? -ne 0  ]
+then 
+  echo "sshpass包安装失败，请手动安装后再进行！"
+fi
+
+
+echo "正在准备上传从域的住配置文件，请保证目标用户真实存在,并且有对bind服务修改的权限!"
+#用户输入从域服务器的用户账号
+read -p "请输入从域的目标用户（默认root）:" nm
+echo $nm |gerp ^[0-9][a-z][A-Z].* &>/dev/null
+if [ $? -ne 0 ]
+then
+  nm=root
+fi
+#用户输入密码
+ read -s -p "请输入$nm用户的密码：" mm
+#上传从域的住配置文件
+ echo "                   正在对从服务器做修改过程稍慢，请等待！                      "
+ sshpass -p $mm  ssh -o StrictHostKeyChecking=no  $nm@$cip  systemctl restart  named   &>/dev/null
+ sshpass -p $mm  ssh -o StrictHostKeyChecking=no  $nm@$cip yum -y install  bind &>/dev/null
+ sshpass -p $mm  scp   $pwd/named.conf  $nm@$cip:/etc/named.conf
+if [ $? -ne 0  ]
+then 
+echo "远程上传从域的主配置文件失败，请手动上传！"
+fi
+
+ echo " "
+ echo "从域的主配置文件已经上传！"
+#启动从域的bind服务
+ echo "正在启动从域的bind服务"
+ sshpass -p $mm  ssh -o StrictHostKeyChecking=no  $nm@$cip systemctl  restart  named  &>/dev/null
+ if [ $? -ne 0  ]
+then 
+  echo "远程启动从域服务器bind失败，请手动启动！"
+fi
