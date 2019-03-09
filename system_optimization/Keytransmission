@@ -1,0 +1,57 @@
+#!/bin/bash
+#2019/3/9
+#狼战士的牙
+#使用expect 进行非交互密钥传输
+#在使用这个脚本之前请检测yum仓库能使用网络源
+
+#检测是否安装了expect ，当然这是非交互的必要程序
+echo "正在检测安装expect"
+rpm -q expect &>/dev/null
+if [ ! $? -eq 0  ];then
+	yum -y install  expect &>/dev/null
+fi
+
+#检测是否有密钥
+echo  "正在检测创建密钥"
+[ -f ~/.ssh/id_rsa  ] &&  [ -f ~/.ssh/id_rsa.pub  ] 
+if [ ! $? -eq 0 ];then
+	echo '检测到密钥对不完整正在创建新的密钥对'
+	yes|ssh-keygen -P '' -t rsa -f ~/.ssh/id_rsa  &>/dev/null
+fi
+
+#进行非交互传送密教,当然前提是它能ping同
+>./ssh_keyip
+read -p "请输入要传送密钥的网段，例如(192.168.116)：" ip
+if [ -z $ip  ];then
+	ip=192.168.116	
+fi
+read -sp '请输入传送网断的的账户密码：'  passwd
+echo 
+if [ -z $passwd ];then
+	passwd=123456
+fi
+
+
+for i in  `seq  137 138`
+do
+	IP=$ip.$i
+	ping  -c1 -W1 $IP  &>/dev/null
+	if [ $? -eq 0 ];then
+		/usr/bin/expect <<-EOF
+			set timeout 50
+			spawn  ssh-copy-id  root@$IP 
+			expect {
+				expect "yes/no"   {send  "yes\r";exp_continue}
+				expect "password" {send  "$passwd\r"};
+			}
+			expect eof
+		EOF
+		if [ $? -eq 0  ];then
+			echo "$IP">>./ssh_keyip
+		fi
+		echo  "已经将密钥传送成功的网址保存到./ssh_keyip中"
+	else
+		echo "$IP is down"
+	fi
+
+done
