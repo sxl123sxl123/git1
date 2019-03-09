@@ -1,0 +1,135 @@
+#!/bin/bash
+#2019/3/9
+#狼战士的牙
+#mysql-5.7.24 源代码编译安装
+#将所需要的安装包放在/opt/web下 然后执行脚本！包括boost_1_59_0.tar.gz \  mysql-5.7.24.tar.gz
+	#退出状态 1 mysql编译失败
+
+#检测是否安装了rpm方式的数据库程序
+RPM(){
+	rpm -q $i   &>/dev/null
+	if [ $? -eq 0 ];then
+		rpm -e $i --nodeps   
+	fi
+}
+echo   "正在检测是否安装了相关冲突的数据库！"
+for  i in  "mysql  mysql-server  mariadb  mariadb-server" ;do
+	RPM 
+done
+
+#检测是否安装gcc  gcc-c++  make  源码编译安装的软件
+GCC(){
+	rpm -q  $i   &>/dev/null
+	if [ $? -eq 0 ];then
+		yum -y install $i &>/dev/null
+	fi     
+}
+echo   "正在检测是否安装了编译的相关软件"
+for i in "gcc  gcc-c++  make";do
+	GCC
+done
+
+#5.7版本后的mysql采用cmake编译安装需要cmake工具，而ncurses-devel是cmake的依赖包，检测cmake是否安装。无论采用什么方式我们都需要ncurses-devel依赖包；我们采用rpm-安装；
+echo "检测是否安装了ncurses-devel,如果没有我们会安装rpm方式的软件包！"
+rpm -q ncurses-devel  &>/dev/null
+if [ $? -eq 0  ];then
+	yum -y install  ncurses-devel  &>/dev/null
+fi
+
+echo  "正在检测是否安装了cmake工具,如果没有安装rpm方式的，我们会自动安装rpm包！"
+rpm -q  cmake  &>/dev/null
+if [ ! $? -eq 0  ];then
+	yum -y install  cmake &>/dev/null	
+fi
+
+#查看是否创建了mysql用户，没有就创建该用户；
+echo "正在创建mysql用户"
+cat /etc/passwd |egrep -w ^mysql  &>/dev/null
+if [ ! $? -eq o  ];then
+	useradd -M -s /sbin/nologin  mysql
+fi
+
+#安装boost,当然mysql-5.7.24版本依赖boost_1_59_0版本
+echo '正在建立boost工具'
+rpm  -q  wget &>/dev/null
+if  [ ! $? -eq 0  ];then
+	yum -y install  wget   &>/dev/null
+fi
+[ -d /usr/local/boost  ] || mkdir /usr/local/boost
+cd /usr/local/boost
+	#这是下载地址当然我们是已经下载好了，请将安装包放在/opt/web下
+	#wget https://sourceforge.net/projects/boost/files/boost/1.59.0/boost_1_59_0.tar.gz
+tar xf /opt/web/boost_1_59_0.tar.gz  -C /usr/local/boost
+
+#解压mysql安装包然后编译,请将安装包放在/opt/web下
+echo  '下一步进行编译'
+sleep 1
+tar xf /opt/web/mysql-5.7.24.tar.gz  -C  /usr/src
+cd  /usr/src/mysql-5.7.24
+cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql  -DDEFAULT_CHARSET=utf8  -DDEFAULT_COLLATION=utf8_general_ci -DWITH_EXTRA_CHARSETS=all -DSYSCONFDIR=/etc -DWITH_BOOST=/usr/local/boost/  &&  make && make install
+
+if [  $? -eq 0   ];then
+	echo -e "\e[1;33m               mysql-5.7.24编译完成！正在继续 \e[0m"
+else
+	echo -e "\e[1;33m               mysql-5.7.24编译失败！正在退出脚本！ \e[0m"
+	sleep 2
+	exit 1
+	#退出状态 1 mysql编译失败
+fi
+
+#编译完成后对目录进行权限修改
+echo "正在修改mysql程序的目录权限"
+cd /usr/local/mysql 
+chown -R mysql.mysql ./
+
+#修改mysql 的配置文件/etc/my.cnf
+echo "正在修改/etc/my.cnf"
+cat  <<-EOF >/etc/my.cnf
+[mysqld]
+datadir=/usr/local/mysql/data
+socket=/tmp/mysql.sock
+skip-grant-tables
+[mysqld_safe]
+log-error=/usr/local/mysql/data/mysql.log
+pid-file=/usr/local/mysql/data/mysql.pid
+EOF
+
+#初始化mysql程序目录
+echo "正在初始化"
+cd /usr/local/mysql
+./bin/mysqld --user=mysql  --basedir=/usr/local/mysql  --datadir=/usr/local/mysql/data  
+--initialize  &>/dev/null
+
+#设置环境变量
+echo "正在设置mysql 的环境变量"
+echo "PATH=$PATH:/usr/local/mysql/bin"  >>/etc/profile
+source  /etc/profile  &>/dev/null
+
+#添加系统服务
+echo "正在设置系统服务"
+cp /usr/local/mysql/support-files/mysql.server  /etc/init.d/mysql
+chmod +x  /etc/init.d/mysql
+chkconfig  --add /etc/init.d/mysql/
+#启动mysql
+echo "正在启动mysql"
+service mysql  start  
+if [ ! $? -eq 0  ];then
+	echo  -e "\e[1;033m  mysql启动成功 \e[0m"
+fi
+
+mysql -uroot  -e "update mysql.user set authentication_string=password('AA123%%') where  user='root' AND host='localhost' " && mysql -uroot -e "flush privileges"
+
+sed -ri '/skip-grant-tables/ s/(.*)/#\1/' /etc/my.cnf
+
+service  mysql  restart 
+
+if [ $? -eq 0  ];then
+	echo '重启mysql成功'
+else
+	exit 2 
+	#退出状态2mysql重启过程中失败
+fi
+
+mysqladmin -uroot -p'AA123%%'  password '123'
+echo -e '\e[1;33;5  mysql初始密码:123,请及时修改   \e[0m'
+
