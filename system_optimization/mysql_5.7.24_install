@@ -32,7 +32,7 @@ done
 #5.7版本后的mysql采用cmake编译安装需要cmake工具，而ncurses-devel是cmake的依赖包，检测cmake是否安装。无论采用什么方式我们都需要ncurses-devel依赖包；我们采用rpm-安装；
 echo "检测是否安装了ncurses-devel,如果没有我们会安装rpm方式的软件包！"
 rpm -q ncurses-devel  &>/dev/null
-if [ $? -eq 0  ];then
+if [ ! $? -eq 0  ];then
 	yum -y install  ncurses-devel  &>/dev/null
 fi
 
@@ -45,7 +45,7 @@ fi
 #查看是否创建了mysql用户，没有就创建该用户；
 echo "正在创建mysql用户"
 cat /etc/passwd |egrep -w ^mysql  &>/dev/null
-if [ ! $? -eq o  ];then
+if [ ! $? -eq 0  ];then
 	useradd -M -s /sbin/nologin  mysql
 fi
 
@@ -59,7 +59,7 @@ fi
 cd /usr/local/boost
 	#这是下载地址当然我们是已经下载好了，请将安装包放在/opt/web下
 	#wget https://sourceforge.net/projects/boost/files/boost/1.59.0/boost_1_59_0.tar.gz
-tar xf /opt/web/boost_1_59_0.tar.gz  -C /usr/local/boost
+[ -d /usr/local/boost/boost_1_59_0 ] ||  tar xf /opt/web/boost_1_59_0.tar.gz  -C /usr/local/boost
 
 #解压mysql安装包然后编译,请将安装包放在/opt/web下
 echo  '下一步进行编译'
