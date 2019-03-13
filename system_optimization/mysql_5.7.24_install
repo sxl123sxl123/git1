@@ -5,10 +5,13 @@
 #将所需要的安装包放在/opt/web下 然后执行脚本！包括boost_1_59_0.tar.gz \  mysql-5.7.24.tar.gz
 	#退出状态 1 mysql编译失败
 #检测是否上传了安装包(tar包)
-for i in "boost_1_59_0.tar.gz  mysql-5.7.24.tar.gz";do
-	ls  /opt/web|egrep -w $i &>/dev/null
+for i in boost_1_59_0.tar.gz  mysql-5.7.24.tar.gz
+do
+	ls  /opt/web|egrep $i &>/dev/null
 	if [ ! $? -eq 0 ];then
 		echo "请将$i放置在/opt/web下"
+		sleep 2
+		exit 254
 	fi
 done
 
@@ -20,7 +23,8 @@ RPM(){
 	fi
 }
 echo   "正在检测是否安装了相关冲突的数据库！"
-for  i in  "mysql  mysql-server  mariadb  mariadb-server" ;do
+for  i in  mysql  mysql-server  mariadb  mariadb-server 
+do
 	RPM 
 done
 
@@ -32,7 +36,8 @@ GCC(){
 	fi     
 }
 echo   "正在检测是否安装了编译的相关软件"
-for i in "gcc  gcc-c++  make";do
+for i in gcc  gcc-c++  make
+do
 	GCC
 done
 
@@ -66,7 +71,9 @@ fi
 cd /usr/local/boost
 	#这是下载地址当然我们是已经下载好了，请将安装包放在/opt/web下
 	#wget https://sourceforge.net/projects/boost/files/boost/1.59.0/boost_1_59_0.tar.gz
-[ -d /usr/local/boost/boost_1_59_0 ] ||  tar xf /opt/web/boost_1_59_0.tar.gz  -C /usr/local/boost
+[ -d /usr/local/boost/boost_1_59_0 ] ||cp  /opt/web/boost_1_59_0.tar.gz  /usr/local/boost/
+cd /usr/local/boost
+tar xf boost_1_59_0.tar.gz
 
 #解压mysql安装包然后编译,请将安装包放在/opt/web下
 echo  '下一步进行编译'
