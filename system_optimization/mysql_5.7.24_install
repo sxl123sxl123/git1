@@ -4,6 +4,13 @@
 #mysql-5.7.24 源代码编译安装
 #将所需要的安装包放在/opt/web下 然后执行脚本！包括boost_1_59_0.tar.gz \  mysql-5.7.24.tar.gz
 	#退出状态 1 mysql编译失败
+#检测是否上传了安装包(tar包)
+for i in "boost_1_59_0.tar.gz  mysql-5.7.24.tar.gz";do
+	ls  /opt/web|egrep -w $i &>/dev/null
+	if [ ! $? -eq 0 ];then
+		echo "请将$i放置在/opt/web下"
+	fi
+done
 
 #检测是否安装了rpm方式的数据库程序
 RPM(){
