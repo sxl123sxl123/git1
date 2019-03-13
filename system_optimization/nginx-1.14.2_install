@@ -1,0 +1,97 @@
+#!/bin/bash
+#狼战士的牙
+#2019/3/13
+#nginx搭建：nginx-1.14.2版本
+
+#检查/opt/web是否有nginx-1.14.2.tar.gz安装包
+[ -d /opt/web ]
+if [ $? -ne 0   ];then
+	echo '请将 nginx-1.14.2.tar.gz 放在/opt/web下'
+	exit 253
+fi
+ls /opt/web|egrep  nginx-1.14.2.tar.gz &>/dev/null
+if [ $? -ne 0 ];then
+	echo '请将 nginx-1.14.2.tar.gz 放在/opt/web/下'
+	exit 254
+fi
+
+
+#关闭防火墙
+iptables -F
+systemctl stop firewalld
+setenforce 0
+
+#查看是否有nginx程序用户
+cat /etc/passwd|egrep -w ^nginx &>/dev/null
+if [ $? -ne  0  ];then
+	useradd  -M  -s /sbin/nologinx  nginx
+fi
+
+#查看依赖的安装包
+for i in openssl-devel  zlib-devel pcre-devel
+do
+	rpm -q $i  &>/dev/null
+	if [ $? -ne 0 ];then
+		echo "installing  $i"
+		yum -y install  $i  &>/dev/null
+	fi
+done
+
+
+#进行解压
+[ -d /usr/src/nginx-1.14.2 ] || tar xf  /opt/web/nginx-1.14.2.tar.gz -C /usr/src
+cd /usr/src/nginx-1.14.2
+[ -d /usr/local/nginx ]||./configure  --prefix=/usr/local/nginx  --user=nginx --group=nginx  --with-http_stub_status_module --with-http_ssl_module --with-http_flv_module --with-http_gzip_static_module  && make &&  make install  
+if [ $? -eq 0  ];then
+	echo -e '\e[1;33m 编译完成！ \e[0m'
+else
+	echo -e '\e[1;33m 编译失败！ \e[0m'
+	sleep 1
+	exit 252
+fi
+
+#修改环境
+ln -s /usr/local/nginx/sbin/nginx /usr/local/bin
+
+
+#写入nginx启动脚本
+touch /etc/init.d/nginx
+chmod +x /etc/init.d/nginx
+echo 1>/etc/init.d/nginx
+sed -ri '$a#!/bin/bash\
+#chkconfig: 2345 99 20\
+#description:Nginx Server Control Script\
+PROG="/usr/local/bin/nginx"\
+PIDF="/usr/local/nginx/logs/nginx.pid"\
+case "$1" in\
+start)\
+        $PROG\
+;;\
+stop)\
+        kill -s QUIT  $(cat $PIDF)\
+;;\
+restart)\
+        $0 stop\
+        $0 start\
+;;\
+reload)\
+        kill -s HUP $(cat $PIDF)\
+;;\
+*)\
+        echo "Usage:$0{start|stop|restart|reload}"\
+        exit 1\
+;;\
+esac\
+exit 0
+'  /etc/init.d/nginx
+sed -ri '1d' /etc/init.d/nginx
+chkconfig --add nginx
+
+#启动服务
+service nginx  start  
+if [  $? -eq 0 ];then
+	echo -e '\e[1;33m 服务启动成功了 \e[0m'
+else
+	echo -e '\e[1;33m  服务启动失败  \e[0m'
+	exit 251
+fi
